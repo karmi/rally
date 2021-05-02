@@ -4917,9 +4917,9 @@ class QueryWithSearchAfterScrollTests(TestCase):
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async
-    async def test_search_after_without_pit(self, es):
+    async def test_search_after_without_pit_all_pages(self, es):
         params = {
-            "name": "search-with-pit",
+            "name": "search-without-pit",
             "operation-type": "paginated-search",
             "index": "test-index-1",
             "pages": "all",
@@ -4991,6 +4991,104 @@ class QueryWithSearchAfterScrollTests(TestCase):
                                                                  headers=None)]
                                                       )
 
+
+    @mock.patch("elasticsearch.Elasticsearch")
+    @run_async
+    async def test_search_after_without_pit_some_pages(self, es):
+        params = {
+            "name": "search-without-pit",
+            "operation-type": "paginated-search",
+            "index": "test-index-1",
+            "pages": "3",
+            "results-per-page": 2,
+            "body": {
+                "sort": [{"timestamp": "asc", "tie_breaker_id": "asc"}],
+                "query": {"match-all": {}}
+            }
+        }
+        page_1 = {
+            "took": 10,
+            "timed_out": False,
+            "hits": {
+                "total": {
+                    "value": 30,
+                    "relation": "eq"
+                },
+                "hits": [
+                    {
+                        "_id": "1",
+                        "timestamp": 1609780186,
+                        "sort": [1609780186, "1"]
+                    },
+                    {
+                        "_id": "2",
+                        "timestamp": 1609780186,
+                        "sort": [1609780186, "2"]
+                    }
+                ]
+            }
+        }
+
+        page_2 = {
+            "took": 10,
+            "timed_out": False,
+            "hits": {
+              "total": {
+                  "value": 30,
+                  "relation": "eq"
+              },
+              "hits": [
+                  {"_id": "3",
+                   "timestamp": 1609780187,
+                   "sort": [1609780187, "3"]
+                   }
+              ]
+            }
+        }
+
+        # The last reponse contains no hits and no sort
+        page_3 = {
+            "took": 10,
+            "timed_out": False,
+            "hits": {
+              "total": {
+                  "value": 30,
+                  "relation": "eq"
+              },
+              "hits": []
+            }
+        }
+
+        es.transport.perform_request.side_effect = [as_future(io.BytesIO(json.dumps(page_1).encode())),
+                                                    as_future(io.BytesIO(json.dumps(page_2).encode())),
+                                                    as_future(io.BytesIO(json.dumps(page_3).encode()))]
+        r = runner.Query()
+        await r(es, params)
+
+        es.transport.perform_request.assert_has_calls([mock.call("GET", "/test-index-1/_search", params={},
+                                                                 body={"query": {"match-all": {}},
+                                                                       "sort": [
+                                                                           {"timestamp": "asc",
+                                                                            "tie_breaker_id": "asc"}],
+                                                                       "size": 2},
+                                                                 headers=None),
+                                                       mock.call("GET", "/test-index-1/_search", params={},
+                                                                 body={"query": {"match-all": {}},
+                                                                       "sort": [
+                                                                           {"timestamp": "asc",
+                                                                            "tie_breaker_id": "asc"}],
+                                                                       "size": 2,
+                                                                       "search_after": [1609780186, "2"]},
+                                                                 headers=None),
+                                                       mock.call("GET", "/test-index-1/_search", params={},
+                                                                 body={"query": {"match-all": {}},
+                                                                       "sort": [
+                                                                           {"timestamp": "asc",
+                                                                            "tie_breaker_id": "asc"}],
+                                                                       "size": 2,
+                                                                       "search_after": [1609780187, "3"]},
+                                                                 headers=None)]
+                                                      )
 
 class SearchAfterExtractorTests(TestCase):
     response_text = """

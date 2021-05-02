@@ -863,6 +863,9 @@ class Query(Runner):
                     # per the documentation the response pit id is most up-to-date
                     CompositeContext.put(pit_op, parsed.get("pit_id"))
 
+                if last_sort is None:
+                    break
+
                 if results.get("hits") / size > page:
                     body["search_after"] = last_sort
                 else:
